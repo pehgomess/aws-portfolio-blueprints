@@ -1,0 +1,222 @@
+CASE2 — ROTEIRO GITFLOW ADAPTADO
+
+Referência para executar manualmente, uma etapa por vez.
+Nenhum comando deste roteiro foi executado automaticamente.
+Diretório: /home/pedro/Documents/repo/aws-portfolio-blueprints
+
+1. MODELO ESCOLHIDO
+
+main: versões publicadas do portfólio.
+dev: integração das funcionalidades em desenvolvimento.
+hml: candidato a release para revisão/validação.
+feature/<assunto>: trabalho novo; nasce de dev e retorna a dev.
+release/<versao>: estabilização; nasce de dev e é promovida a hml/main.
+hotfix/<assunto>: correção urgente de versão publicada; nasce de main.
+
+Não criar branches chamadas apenas feature, release e hotfix para manter para sempre.
+Criar uma branch específica quando surgir trabalho, como feature/case2-network.
+Dev/hml/main são persistentes. As outras são temporárias.
+Este é GitFlow adaptado com hml; não é uma exigência do Terraform.
+Branches não criam ambientes AWS, não selecionam tfvars e não separam estado.
+
+Fluxo normal:
+dev -> feature/assunto -> PR para dev
+ dev -> release/0.0.1 -> PR para hml -> PR hml para main -> tag v0.0.1
+ release/0.0.1 -> PR para dev (sincronizar correções da release)
+
+2. ESTADO ENCONTRADO NESTA REVISÃO
+
+A branch local main ainda não tem commits.
+Há arquivos não versionados (.github, .gitignore e case2).
+Origin já está configurado como:
+https://github.com/pehgomess/aws-portfolio-blueprints.git
+O conteúdo remoto não foi inspecionado; confirmar antes do primeiro push.
+
+O workflow atual roda somente PR/push para main e execução manual.
+Antes de usar dev/hml como gates, ajustar terraform-ci.yml para:
+  pull_request: branches: [main, dev, hml]
+  push: branches: [main, dev, hml]
+Manter workflow_dispatch. Adicionar release/* aos pushes é opcional.
+Sem esse ajuste, feature -> dev e release -> hml não terão o CI atual disparado.
+Essa alteração do workflow ainda não foi feita por este roteiro.
+
+3. CONFERIR IDENTIDADE E REMOTO
+
+cd /home/pedro/Documents/repo/aws-portfolio-blueprints
+git status
+git remote -v
+git config user.name
+git config user.email
+git ls-remote --heads origin
+
+Se faltar identidade, configurar com seus dados reais apenas localmente:
+git config user.name "SEU NOME"
+git config user.email "SEU EMAIL DO GITHUB"
+
+O roteiro abaixo pressupõe origin vazio. Se ls-remote mostrar branches existentes,
+não usar force push. Primeiro integrar o histórico remoto e adaptar o bootstrap.
+
+4. BOOTSTRAP — CRIAR BASE COMUM
+
+Um repositório sem commits precisa de um ancestral comum para seus primeiros PRs.
+Fazer uma única inicialização vazia em main; o código entrará pela feature.
+A exceção de push inicial termina depois deste bootstrap.
+
+# Verificar que continua em main e não há arquivos staged:
+git branch --show-current
+git diff --cached --name-only
+
+# Se houver arquivos staged, retirar do índice antes do commit vazio.
+# Não executar commit vazio sem verificar, pois --allow-empty não ignora o índice.
+git commit --allow-empty -m "chore: initialize portfolio repository"
+git push -u origin main
+
+# Criar as bases a partir do mesmo commit:
+git switch -c dev
+git push -u origin dev
+git switch -c hml
+git push -u origin hml
+git switch dev
+
+Depois, configurar proteção/rulesets no GitHub para main, dev e hml:
+- Exigir Pull Request.
+- Exigir o check Terraform fmt and validate após ele aparecer no GitHub.
+- Bloquear force push e exclusão das branches persistentes.
+- Revisores conforme os colaboradores disponíveis; não exigir autoaprovação.
+- Permitir merge commit para promoção e sincronização deste roteiro.
+Não confundir proteção de branch com aprovação de deploy.
+
+5. PRIMEIRA FEATURE — BASE TERRAFORM EXISTENTE
+
+# Seus arquivos não versionados continuam no diretório após criar as branches.
+git switch dev
+git switch -c feature/case2-terraform-base
+
+# Ajustar os gatilhos CI para dev/hml conforme seção 2 antes de enviar.
+# Adicionar explicitamente os arquivos públicos atuais:
+git add .gitignore .github/workflows/terraform-ci.yml
+git add case2/terraform case2/docs case2/tasks.md case2/LOCAL.md
+
+# Conferir exatamente o que será publicado:
+git diff --cached --stat
+git diff --cached
+git status
+
+# Somente após revisão:
+git commit -m "feat(case2): add Terraform base and validation CI"
+git push -u origin feature/case2-terraform-base
+
+No GitHub: abrir PR de feature/case2-terraform-base para dev.
+Aguardar checks, revisar e concluir com merge commit.
+Se os checks falharem, corrigir na mesma feature, commit e push novamente.
+Não criar tag de release ainda.
+
+Observação: .gitignore ignora **/process/. O process.log e commands.txt continuam
+locais, mesmo com git add case2. Isso é a regra atual, não um erro do Git.
+Tasks/docs usados no portfólio não devem depender desses arquivos ignorados para
+explicar a entrega ao visitante. Decidir depois se serão publicados ou se seus
+conteúdos necessários serão transferidos para documentação pública.
+
+6. PRÓXIMAS FEATURES
+
+# Após o merge da primeira feature:
+git switch dev
+git pull --ff-only origin dev
+git switch -c feature/case2-network
+
+# Desenvolver somente a etapa desejada; revisar arquivos antes de adicionar:
+git status
+git add case2/terraform
+# Incluir arquivos de documentação alterados explicitamente.
+git diff --cached
+git commit -m "feat(case2): model public and private network"
+git push -u origin feature/case2-network
+
+Abrir PR feature/case2-network -> dev, verificar CI e fazer merge.
+Repetir para endpoints, IAM, ALB e ECS com branches específicas.
+Os comandos da seção 6 são exemplos futuros, não trabalho já realizado.
+
+7. PRIMEIRA RELEASE — QUANDO O MARCO ESTIVER PRONTO
+
+v0.0.1 pode identificar a base Terraform + CI, mesmo sem VPC/ECS, desde que a
+nota da release descreva esse limite. Não é preciso tag em cada commit.
+A versão marca um conjunto revisado de mudanças.
+
+# Depois de integrar as features desejadas em dev:
+git switch dev
+git pull --ff-only origin dev
+git switch -c release/0.0.1
+git push -u origin release/0.0.1
+
+Abrir PR release/0.0.1 -> hml. Aguardar CI/revisão e fazer merge commit.
+Revisar documentação e resultados; isso não significa testar infraestrutura AWS.
+Correções de estabilização são feitas na release, com commit/push e novo PR para hml.
+Depois, abrir PR hml -> main, revisar e fazer merge commit.
+Não fazer push direto em main para contornar a proteção.
+
+# Atualizar main e confirmar o commit exato aprovado antes de criar a tag:
+git switch main
+git pull --ff-only origin main
+git log -1 --oneline
+git tag -a v0.0.1 -m "case2: Terraform base and static CI; no AWS deployment"
+git push origin v0.0.1
+
+A tag aponta para o commit; o prefixo v é uma convenção.
+Tag não é branch. Criar tag não cria automaticamente uma GitHub Release.
+Se desejar, criar uma Release no GitHub usando essa tag e descrever o que funciona,
+o que está pendente e quais verificações foram executadas.
+O workflow atual não é disparado por push de tags; o check já ocorreu no PR/main.
+
+Sincronizar correções da release: PR release/0.0.1 -> dev, merge commit.
+Depois sincronizar main -> dev e dev -> hml por PR se houver commits ainda ausentes.
+Essa sincronização mantém ancestrais comuns; não copiar arquivos manualmente.
+Evitar squash/rebase nos PRs de promoção entre branches persistentes deste roteiro.
+
+# Depois dos merges e sincronizações, exclusão opcional da release:
+git switch dev
+git pull --ff-only origin dev
+git branch -d release/0.0.1
+git push origin --delete release/0.0.1
+
+Se -d recusar, conferir se o trabalho foi integrado; não trocar por -D sem entender.
+Branches feature também podem ser removidas após o merge.
+
+8. HOTFIX — SOMENTE APÓS EXISTIR VERSÃO PUBLICADA
+
+Exemplo futuro: erro no workflow da versão v0.0.1.
+
+git switch main
+git pull --ff-only origin main
+git switch -c hotfix/case2-ci
+
+# Corrigir, revisar e adicionar somente os arquivos pertinentes:
+git add .github/workflows/terraform-ci.yml
+git diff --cached
+git commit -m "fix(ci): correct Terraform validation workflow"
+git push -u origin hotfix/case2-ci
+
+Abrir PR hotfix/case2-ci -> main; aguardar checks e fazer merge commit.
+
+git switch main
+git pull --ff-only origin main
+git tag -a v0.0.2 -m "case2: fix Terraform CI"
+git push origin v0.0.2
+
+Depois abrir PR main -> dev e, após merge, dev -> hml para propagar a correção.
+Se houver release ativa, sincronizar main -> release/<versao> por PR também.
+Resolver conflitos na branch de trabalho e revisar; nunca descartar alterações
+para apenas fazer o merge passar. Manter branches persistentes atualizadas.
+
+9. LEMBRETES
+
+- Commit: registra uma mudança. Branch: linha de trabalho. Tag: referência de versão.
+- Feature termina em dev; release passa por hml e chega a main; hotfix nasce de main.
+- Versões 0.x comunicam evolução inicial; descrever claramente o marco entregue.
+- CI atual apenas valida Terraform. Nenhum merge/tag faz deploy AWS.
+- Backend e tfvars do ambiente serão selecionados explicitamente se houver CD futuro.
+- Não versionar tfstate, planos ou credenciais; não usar git push --force neste roteiro.
+- Executar comandos por etapa, não colar este arquivo inteiro no terminal.
+
+Referências:
+https://git-scm.com/docs/git-switch
+https://git-scm.com/docs/git-tag

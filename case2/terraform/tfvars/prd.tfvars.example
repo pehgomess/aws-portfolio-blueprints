@@ -1,0 +1,3 @@
+region     = "us-east-2"
+environ    = "prd"
+maintainer = "squad-sre"
